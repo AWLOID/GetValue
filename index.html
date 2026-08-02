@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="API и таблица значений оружия и питомцев MM2 из Supreme Values">
+  <title>MM2 Values API</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="MM2 Values API">
+      <span class="brand-mark">SV</span>
+      <span>MM2 Values API</span>
+    </a>
+    <div class="source">Источник <a href="https://supremevalues.com/" target="_blank" rel="noreferrer">Supreme Values ↗</a></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Публичный справочник</p>
+        <h1>Значения оружия<br>и питомцев MM2</h1>
+        <p class="intro">Полные названия и Value в одном быстром публичном API. Данные обновляются по расписанию, а последняя успешная версия остаётся доступной при сбое источника.</p>
+        <div class="hero-actions">
+          <button id="request-data" class="primary-action">Запросить данные</button>
+          <a class="secondary-action" href="/api/download?format=json" download>Скачать JSON</a>
+          <a class="secondary-action" href="/api/download?format=csv" download>Скачать CSV</a>
+          <a class="secondary-action" href="/api/download?format=txt" download>Скачать TXT</a>
+        </div>
+      </div>
+      <div class="status-card" aria-live="polite">
+        <span class="status-label"><i id="status-dot"></i><span id="status-text">Загрузка данных</span></span>
+        <strong id="updated">—</strong>
+        <span class="status-note">Последнее успешное обновление</span>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="Статистика">
+      <article><span>Всего записей</span><strong id="total">—</strong></article>
+      <article><span>Оружие</span><strong id="weapon-count">—</strong></article>
+      <article><span>Питомцы</span><strong id="pet-count">—</strong></article>
+      <article><span>Источник данных</span><strong id="cache">—</strong></article>
+    </section>
+
+    <section class="workspace">
+      <div class="workspace-head">
+        <div>
+          <p class="section-index">01 / Данные</p>
+          <h2>Таблица значений</h2>
+        </div>
+        <span id="result-count" class="result-count">0 результатов</span>
+      </div>
+      <div class="toolbar">
+        <label class="search">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="Поиск по полному названию…" autocomplete="off">
+        </label>
+        <div class="tabs" role="group" aria-label="Тип предмета">
+          <button class="active" data-type="all">Все</button>
+          <button data-type="weapon">Оружие</button>
+          <button data-type="pet">Питомцы</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Название</th><th>Тип</th><th>Категория</th><th class="value-col">Value</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="4" class="empty">Загружаем актуальные значения…</td></tr></tbody>
+        </table>
+      </div>
+      <nav id="pagination" class="pagination" aria-label="Страницы"></nav>
+    </section>
+
+    <section class="api-section">
+      <div class="workspace-head">
+        <div><p class="section-index">02 / Интеграция</p><h2>API-эндпоинты</h2></div>
+        <span class="format">UTF-8 · JSON / TEXT</span>
+      </div>
+      <div class="endpoint-list">
+        <div class="endpoint"><span class="method">GET</span><code>/api/values</code><p>Все записи в JSON</p><button data-copy="/api/values">Копировать</button></div>
+        <div class="endpoint"><span class="method">GET</span><code>/api/values?type=weapon</code><p>Только оружие</p><button data-copy="/api/values?type=weapon">Копировать</button></div>
+        <div class="endpoint"><span class="method">GET</span><code>/api/values?type=pet</code><p>Только питомцы</p><button data-copy="/api/values?type=pet">Копировать</button></div>
+        <div class="endpoint"><span class="method text">TEXT</span><code>/api/text</code><p>Строки name=value</p><button data-copy="/api/text">Копировать</button></div>
+        <div class="endpoint"><span class="method">GET</span><code>/api/download?format=csv</code><p>Скачивание JSON, CSV или TXT</p><button data-copy="/api/download?format=csv">Копировать</button></div>
+        <div class="endpoint"><span class="method">GET</span><code>/api/health</code><p>Свежесть и состояние данных</p><button data-copy="/api/health">Копировать</button></div>
+      </div>
+      <p class="params">Параметры: <code>type=weapon|pet</code> · <code>q=Nightsky</code> · <code>format=json|csv|txt</code>. Пример: <a href="/api/values?q=Nightsky"><code>/api/values?q=Nightsky</code></a></p>
+    </section>
+  </main>
+
+  <footer><span>MM2 Values API</span><span>Независимый сервис · Не связан с Roblox или Supreme Values</span></footer>
+  <div id="toast" role="status">URL скопирован</div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
