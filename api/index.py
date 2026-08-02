@@ -10,8 +10,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from lib.parser import ParseError, scrape_all
-from lib.store import read_latest, write_latest
+from lib.store import read_latest
 
 
 def _filtered(data: dict, query: dict[str, list[str]]) -> list[dict]:
@@ -29,22 +28,25 @@ def _age_seconds(updated_at: str | None) -> int | None:
     if not updated_at:
         return None
     try:
-        updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-        return max(0, int((datetime.now(timezone.utc) - updated).total_seconds()))
-    except (ValueError, TypeError):
+        dt = datetime.fromisoformat(updated_at)
+        return int((datetime.now(timezone.utc) - dt).total_seconds())
+    except ValueError:
         return None
 
 
 def _public_payload(data: dict, cache: str, items: list[dict]) -> dict:
     age = _age_seconds(data.get("updatedAt"))
     return {
+        "success": True,
         "updatedAt": data.get("updatedAt"),
+        "lastUpdate": data.get("updatedAt"),
         "source": data.get("source"),
         "cache": cache,
         "stale": cache == "seed" or age is None or age > 7200,
         "ageSeconds": age,
         "count": len(items),
         "items": items,
+        "weapons": items,
     }
 
 
@@ -59,24 +61,30 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400")
             self.end_headers()
             return
+
         self.send_response(status)
         self.send_header("Content-Type", content_type)
-        self.send_header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400" if public else "no-store")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, If-None-Match")
-        self.send_header("ETag", etag)
         self.send_header("X-Content-Type-Options", "nosniff")
+        if public:
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400")
+        else:
+            self.send_header("Cache-Control", "no-store")
         if filename:
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(body)
+        self.wfile.write(body)
 
     def _json(self, status: int, payload: dict | list, *, public: bool = True) -> None:
-        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        self._send(status, body, "application/json; charset=utf-8", public=public)
+        self._send(
+            status,
+            json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+            "application/json; charset=utf-8",
+            public=public,
+        )
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -94,7 +102,8 @@ class handler(BaseHTTPRequestHandler):
         route = parsed.path.rstrip("/") or "/api"
         query = parse_qs(parsed.query)
 
-        if route in {"/api", "/api/values"}:
+        # Allow /api, /api/values, /api/index.py (due to Vercel rewrite destinations)
+        if route in {"/api", "/api/values", "/api/index.py", "/api/index", ""}:
             data, cache = read_latest()
             items = _filtered(data, query)
             self._json(200, _public_payload(data, cache, items))
@@ -117,7 +126,7 @@ class handler(BaseHTTPRequestHandler):
                 body = ("\n".join(f'{item["name"]}={item["value"]}' for item in items) + "\n").encode("utf-8")
                 self._send(200, body, "text/plain; charset=utf-8", filename="mm2-values.txt" if route == "/api/download" else None)
             else:
-                self._json(400, {"error": "format must be json, csv or txt"})
+                self._json(400, {"error": "format must be json, csv or txt"}, public=False)
             return
 
         if route == "/api/health":
@@ -130,38 +139,12 @@ class handler(BaseHTTPRequestHandler):
                 "updatedAt": data.get("updatedAt"),
                 "ageSeconds": age,
                 "count": len(data.get("items", [])),
+                "weapons": sum(item.get("type") == "weapon" for item in data.get("items", [])),
+                "pets": sum(item.get("type") == "pet" for item in data.get("items", [])),
             })
             return
 
-        if route == "/api/cron":
-            secret = os.getenv("CRON_SECRET")
-            authorization = self.headers.get("Authorization", "")
-            if not secret or not hmac.compare_digest(authorization, f"Bearer {secret}"):
-                self._json(401, {"ok": False, "error": "Unauthorized"}, public=False)
-                return
-            try:
-                previous, _ = read_latest()
-                data = scrape_all(previous=previous)
-                persisted = write_latest(data)
-                self._json(200, {
-                    "ok": True,
-                    "persisted": persisted,
-                    "updatedAt": data["updatedAt"],
-                    "count": len(data["items"]),
-                    "weapons": sum(item["type"] == "weapon" for item in data["items"]),
-                    "pets": sum(item["type"] == "pet" for item in data["items"]),
-                    "partial": data.get("partial", False),
-                    "errors": data.get("errors", {}),
-                }, public=False)
-            except ParseError as exc:
-                data, cache = read_latest()
-                self._json(502, {
-                    "ok": False,
-                    "error": str(exc),
-                    "fallback": cache,
-                    "updatedAt": data.get("updatedAt"),
-                    "count": len(data.get("items", [])),
-                }, public=False)
-            return
-
-        self._json(404, {"error": "Not found"})
+        # Default fallback for any unmatched route under /api -> return values JSON
+        data, cache = read_latest()
+        items = _filtered(data, query)
+        self._json(200, _public_payload(data, cache, items))
