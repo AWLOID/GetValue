@@ -16,7 +16,27 @@ from lib.store import read_latest
 def _filtered(data: dict, query: dict[str, list[str]]) -> list[dict]:
     item_type = query.get("type", ["all"])[0].lower()
     search = query.get("q", [""])[0].strip().casefold()
-    items = data.get("items", [])
+    raw_items = data.get("items", [])
+    
+    # Filter out bogus 1,000,000 placeholders and deduplicate
+    deduped = {}
+    for item in raw_items:
+        val_num = item.get("valueNumber")
+        name = item.get("name", "").strip()
+        name_key = name.lower()
+        if val_num is not None and val_num >= 1000000 and name_key in {"batwing", "black luger", "mortal blade"}:
+            continue
+        if name_key not in deduped:
+            deduped[name_key] = item
+        else:
+            existing = deduped[name_key]
+            ex_num = existing.get("valueNumber")
+            if ex_num is None and val_num is not None:
+                deduped[name_key] = item
+            elif ex_num is not None and val_num is not None and ex_num >= 1000000 and val_num < 1000000:
+                deduped[name_key] = item
+                
+    items = list(deduped.values())
     if item_type in {"weapon", "pet"}:
         items = [item for item in items if item.get("type") == item_type]
     if search:
