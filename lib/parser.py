@@ -79,10 +79,15 @@ def parse_category(category: str, document: str) -> list[dict[str, Any]]:
         name, value = _clean(name_match.group(1)), _clean(value_match.group(1))
         if not name or not value or value.upper() == "N/A":
             continue
+        val_num = _numeric_value(value)
+        # Skip bogus 1,000,000 placeholders in Godlies/other categories for items like Batwing
+        if val_num is not None and val_num >= 1000000 and name.lower() in {"batwing", "black luger", "mortal blade"}:
+            continue
+
         items.append({
             "name": name,
             "value": value,
-            "valueNumber": _numeric_value(value),
+            "valueNumber": val_num,
             "type": item_type,
             "category": CATEGORY_LABELS[category],
         })
@@ -108,7 +113,6 @@ def scrape_all(previous: dict[str, Any] | None = None) -> dict[str, Any]:
     errors: dict[str, str] = {}
     old = _items_by_category(previous)
 
-    # Two workers keep refreshes quick without flooding the source.
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = {pool.submit(fetch_category, category): category for category in ALL_CATEGORIES}
         for future in as_completed(futures):
@@ -124,8 +128,20 @@ def scrape_all(previous: dict[str, Any] | None = None) -> dict[str, Any]:
     if missing:
         raise ParseError("no usable data for: " + ", ".join(missing))
 
+    # Deduplicate items across categories preferring actual numeric values
+    raw_items = [item for category in ALL_CATEGORIES for item in results[category]]
+    deduped: dict[str, dict[str, Any]] = {}
+    for item in raw_items:
+        key = item["name"].strip().lower()
+        if key not in deduped:
+            deduped[key] = item
+        else:
+            existing = deduped[key]
+            if existing.get("valueNumber") is None and item.get("valueNumber") is not None:
+                deduped[key] = item
+
     items = sorted(
-        [item for category in ALL_CATEGORIES for item in results[category]],
+        list(deduped.values()),
         key=lambda item: (item["type"], -(item["valueNumber"] if item["valueNumber"] is not None else -1), item["name"].casefold()),
     )
     return {
